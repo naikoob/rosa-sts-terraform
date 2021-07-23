@@ -2,13 +2,14 @@
 
 This project contains terraform config to pre-create IAM roles and identity providers to enable installation of Red Hat OpenShift Service on AWS using Secure Token Service.
 
-== How
+NOTE: these are tested with ROSA CLI version 1.0.9, and OpenShift 4.7.19
 
 === Prerequisite
 . You should have an AWS sub account under your AWS Organization, and have the means to assume an admin role in this sub account 
 . Red Hat account to access https://console.redhat.com 
 . ROSA command line tool from here -> https://www.openshift.com/products/amazon-openshift/download 
 . Terraform
+. Some common linux/unix utils: openssl, sed, tail
 
 === Steps
 . Enable ROSA for the sub account if you have not done so 
