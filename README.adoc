@@ -1,0 +1,98 @@
+= Pre-create roles and identity providers for installing ROSA with STS
+
+This project contains terraform config to pre-create IAM roles and identity providers to enable installation of Red Hat OpenShift Service on AWS using Secure Token Service.
+
+== How
+
+=== Prerequisite
+. You should have an AWS sub account under your AWS Organization, and have the means to assume an admin role in this sub account 
+. Red Hat account to access https://console.redhat.com 
+. ROSA command line tool from here -> https://www.openshift.com/products/amazon-openshift/download 
+. Terraform
+
+=== Steps
+. Enable ROSA for the sub account if you have not done so 
+. Get a token from https://console.redhat.com/openshift/token/rosa/ to login via ROSA CLI
+. Clone this repo.
+. Create roles, etc by invoking terraform
++
+[source, bash]
+----
+terraform apply -var aws_account_id=<AWS-sub-account-for-rosa> -var rosa-admin-role=<rosa-admin-role> 
+----
+. If no errors from Terraform, you can install ROSA with the following: 
++
+[source, bash]
+----
+$ rosa create cluster \
+    --cluster-name ${name} \
+    --region ${region} \
+    --version ${version} \
+    --role-arn arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-IAM-Role \
+    --support-role-arn arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-Support-Role \
+    --master-iam-role arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-ControlPlane-Role \
+    --worker-iam-role arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-Worker-Role \
+    --operator-iam-roles aws-cloud-credentials,openshift-machine-api,arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-openshift-machine-api-aws-cloud-credentials \
+    --operator-iam-roles cloud-credential-operator-iam-ro-creds,openshift-cloud-credential-operator,arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-openshift-cloud-credential-operator-cloud-crede \
+    --operator-iam-roles installer-cloud-credentials,openshift-image-registry,arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-openshift-image-registry-installer-cloud-creden \
+    --operator-iam-roles cloud-credentials,openshift-ingress-operator,arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-openshift-ingress-operator-cloud-credentials \
+    --operator-iam-roles ebs-cloud-credentials,openshift-cluster-csi-drivers,arn:aws:iam::${aws_account_id}:role/ManagedOpenShift-openshift-cluster-csi-drivers-ebs-cloud-credent
+----
+. Take note of the cluster ID from the output of the above command
++
+[source, bash]
+----
+I: Creating cluster 'rosa-sts'
+I: To view a list of clusters and their status, run 'rosa list clusters'
+I: Cluster 'rosa-sts' has been created.
+I: Once the cluster is installed you will need to add an Identity Provider before you can login into the cluster. See 'rosa create idp --help' for more information.
+I: To determine when your cluster is Ready, run 'rosa describe cluster -c rosa-sts'.
+I: To watch your cluster installation logs, run 'rosa logs install -c rosa-sts --watch'.
+Name:                       rosa-sts
+ID:                         <your-rosa-cluster-id> <-- Cluster ID
+External ID:                
+OpenShift Version:          
+----
+. Get the OIDC provider thumbprint with: 
++
+[source, bash]
+----
+$ thumbprint=$(openssl s_client \
+    -servername rh-oidc.s3.us-east-1.amazonaws.com/${cluster_id} \
+    -showcerts \
+    -connect rh-oidc.s3.us-east-1.amazonaws.com:443 </dev/null 2>&1|
+    openssl x509 \
+    -fingerprint \
+    -noout |
+    tail -n1 |
+    sed 's/SHA1 Fingerprint=//' |
+    sed 's/://g'
+  )
+----
+. re-apply terraform with the cluster id
++
+[source, bash]
+----
+terraform apply -var aws_account_id=<AWS-sub-account-for-rosa> -var rosa-admin-role=<rosa-admin-role> -var rosa_cluster_id=<cluster-id> -var rosa_oidc_thumbprint=${thumbprint}
+----
+. the open-id identity provider should be updated after the above. Confirm by:
++
+[source, bash]
+----
+$ aws iam list-open-id-connect-providers
+{
+    "OpenIDConnectProviderList": [
+        {
+            "Arn": "arn:aws:iam::995786267701:oidc-provider/rh-oidc.s3.us-east-1.amazonaws.com/<your-rosa-cluster-id>"
+        }
+    ]
+}
+----
+. cluster installation should begin in a minute or so, you can check progress on https://console.redhat.com or via CLI
++
+[source, bash]
+----
+$ rosa logs install -c <your-cluster-name> --watch
+----
+. ROSA should be installed after around 40 minutes.
+
