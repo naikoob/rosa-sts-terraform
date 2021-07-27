@@ -18,5 +18,5 @@ variable "rosa_cluster_id" {
 variable "rosa_oidc_thumbprint" {
   description = "ROSA OIDC provider thumbprint"
   type        = string
-  default     = "replace_me"
+  default     = "0123456789012345678901234567890123456789"
 }
